@@ -7,14 +7,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-async def main():
-    credentials = DefaultAzureCredential()
+credentials = DefaultAzureCredential()
 
-    chat_client = FoundryChatClient(
-        credential= credentials,
-        project_endpoint= os.getenv("FOUNDRY_PROJECT_ENDPOINT"),
-        model=os.getenv("FOUNDRY_MODEL_NAME")
-    )
+chat_client = FoundryChatClient(
+    credential= credentials,
+    project_endpoint= os.getenv("FOUNDRY_PROJECT_ENDPOINT"),
+    model=os.getenv("FOUNDRY_MODEL_NAME")
+)
+
+async def main():
+    
 
     agent = chat_client.as_agent(
                name="IT Help Desk Agent",
