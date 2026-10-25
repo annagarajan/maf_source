@@ -23,78 +23,56 @@ def validate_environment_variables():
     return model, endpoint
 
 
-async def get_user_input(prompt: str) -> str:
-    """Asynchronously get user input without blocking the event loop."""
-    return await asyncio.to_thread.run_in_executor(None, input, prompt)
-
-
-async def main():
-    # Validate environment variables
-    model, endpoint = validate_environment_variables()
-
-    # Create credentials and client
-    credentials = DefaultAzureCredential()
-    chat_client = FoundryChatClient(
-        credential=credentials,
-        model=model,
-        project_endpoint=endpoint
-    )
-
-    agent = Agent(
-        client=chat_client,
-        name="general-agent",
-        description="general chat demo agent",
-        instructions=(
-            "You are a helpful general support assistant. "
-            "When a user asks a question, keep your responses clear and concise."
+async def main(model: str, endpoint: str):
+    async with DefaultAzureCredential() as credential:
+        chat_client = FoundryChatClient(
+            credential=credential,
+            model=model,
+            project_endpoint=endpoint,
         )
-    )
 
-    session = agent.create_session()
+        agent = Agent(
+            client=chat_client,
+            name="general-agent",
+            description="general chat demo agent",
+            instructions=(
+                "You are a helpful general support assistant. "
+                "When a user asks a question, keep your responses clear and concise."
+            ),
+        )
+        session = agent.create_session()
 
-    try:
         while True:
             try:
-                user_input = await get_user_input("You : (type 'exit' to quit): ")
+                # input() blocks, so run it in a worker thread to keep the event loop free
+                user_input = await asyncio.to_thread(
+                    input, "You (type 'exit' to quit): "
+                )
             except EOFError:
-                print("\nInput stream closed. Exiting.")
-                break
-            except KeyboardInterrupt:
-                print("\n\nInterrupted by user. Exiting.")
                 break
 
-            # Skip empty input
-            if not user_input.strip():
+            user_input = user_input.strip()
+            if not user_input:
                 continue
-
-            if user_input.strip().lower() in ["exit", "quit"]:
-                print("Goodbye!")
+            if user_input.lower() in ("exit", "quit"):
                 break
 
             try:
                 resp = await agent.run(
-                    Message(role="user", contents=user_input),
-                    session=session
+                    Message(role="user", contents=user_input), session=session
                 )
                 print(f"Agent: {resp.text}\n")
             except Exception as e:
-                print(f"Error while processing response: {type(e).__name__}: {e}")
-                print("Please try again.\n")
-
-    finally:
-        # Clean up resources
-        if hasattr(session, 'close'):
-            session.close()
-        if hasattr(credentials, 'close'):
-            await credentials.close()
+                print(f"Error: {type(e).__name__}: {e}\n", file=sys.stderr)
 
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        model_name, project_endpoint = validate_environment_variables()
     except ValueError as e:
-        print(f"Configuration error: {e}", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        print(f"Fatal error: {type(e).__name__}: {e}", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(f"Configuration error: {e}")
+
+    try:
+        asyncio.run(main(model_name, project_endpoint))
+    except KeyboardInterrupt:
+        print("\nGoodbye!")
